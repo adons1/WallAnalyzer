@@ -18,18 +18,36 @@ namespace ConsoleApp5
 {
     class Program
     {
+        //Таймер
         static void Timer()
         {
             int number = 0;
             while (true)
             {
                 Console.SetCursorPosition(0, Console.CursorTop);
-                Console.Write("{0}\tсек.", number);
-                number++;
+                Console.Write("                                                                                                                       ");
 
+                Console.SetCursorPosition(0, Console.CursorTop);
+                Console.Write("{0} s.\tRest photos to analyze: {1}", number, Directory.GetFiles("userphotos", "*.*").Length);
+
+                number++;
                 Thread.Sleep(1000);
             }
         }
+        //Поисх всех вхождений подстроки
+        static int AllMatches(string key, ref string soup)
+        {
+            var indices = new List<int>();
+
+            int index = soup.IndexOf(key, 0);
+            while (index > -1)
+            {
+                indices.Add(index);
+                index = soup.ToLower().IndexOf(key.ToLower(), index + key.Length);
+            }
+            return indices.Count;
+        }
+        //Анализ вхождения ключевых слов
         static string AnalyzeKeyWords(string[] keys, string soup)
         {
             string conclusion = string.Empty;
@@ -37,13 +55,13 @@ namespace ConsoleApp5
             {
                 if (key.Length > 0)
                 {
-                    conclusion += string.Format("Ключ: {0} на позиции {1}\n", key, soup.IndexOf(key));
+                    conclusion += string.Format("Ключ: {0} количество {1}\n", key, AllMatches(key, ref soup));
                 }
             }
             return conclusion;
         }
-       
-        static string PythonAnalisys(string[] args)
+       //Анализ фотографий
+        static string PythonAnalisys()
         {
             string textFromFile = string.Empty;
             try
@@ -51,7 +69,7 @@ namespace ConsoleApp5
                 string command = "analyzer.py";
                 ProcessStartInfo start = new ProcessStartInfo();
                 start.FileName = "python";
-                start.Arguments = string.Format("{0} {1}", command, args);
+                start.Arguments = string.Format("{0}", command);
                 start.UseShellExecute = false;
                 start.RedirectStandardOutput = true;
                 using (Process process = Process.Start(start))
@@ -61,7 +79,7 @@ namespace ConsoleApp5
                         string result = reader.ReadToEnd();
                         Console.Write(result);
 
-                        FileStream file = new FileStream("alalisys.txt", FileMode.Open);
+                        FileStream file = new FileStream("alalisys_photos.txt", FileMode.Open);
                         byte[] array = new byte[file.Length];
                         file.Read(array, 0, array.Length);
                         textFromFile = System.Text.Encoding.Default.GetString(array);
@@ -75,30 +93,37 @@ namespace ConsoleApp5
             }
             return textFromFile;
         }
-        static string GetText(VkApi api, long? id)
+        //Скачивание текста
+        static string GetText(VkApi api, long? id, ulong qWallPosts)
         {
             var records = api.Wall.Get(new WallGetParams
             {
                 OwnerId = id,
-                Count = 1000
+                Count = qWallPosts
             });
 
             StringBuilder stringBuilder = new StringBuilder();
-            int count = 0;
+            
             foreach (var record in records.WallPosts)
             {
                 stringBuilder.Append(record.Text + " ");
             }
+            using (FileStream fstream = new FileStream("alalisys_text.txt", FileMode.OpenOrCreate))
+            {
+                byte[] array = System.Text.Encoding.Default.GetBytes(stringBuilder.ToString());
+                fstream.Write(array, 0, array.Length);
+            }
             return stringBuilder.ToString();
         }
-        static void GetPhotos(VkApi api, long? id)
+        //Скачивание фотографий
+        static void GetPhotos(VkApi api, long? id, ulong qWallPosts)
         {
             List<string> urls = new List<string>();
             var photos = api.Photo.Get(new PhotoGetParams
             {
                 OwnerId = id,
                 AlbumId = VkNet.Enums.SafetyEnums.PhotoAlbumType.Wall,
-                Count = 100
+                Count =  qWallPosts
             });
             foreach (var photo in photos)
             {
@@ -137,7 +162,7 @@ namespace ConsoleApp5
         static void Main(string[] args)
         {
             long? id = 2436112;
-            string access_token = "";
+            string access_token = "4fc507a59d36dce191e6ebe4892ae198506ac28e4d2b191981d711a28390bca51d30e9de0f0d296a59030";
             string[] key_words;
             //Console.WriteLine("ID пользователя для анализа:");
             //access_token = Console.ToInt32(Console.ReadLine());
@@ -156,13 +181,13 @@ namespace ConsoleApp5
             Thread timer = new Thread(Timer);
             timer.Start();
 
-            string soup = GetText(api, id);
+            string soup = GetText(api, id, 1000);
 
-            GetPhotos(api, id);
+            GetPhotos(api, id, 200);
 
-            soup += PythonAnalisys(args);
+            soup += PythonAnalisys();
             string conclusion = AnalyzeKeyWords(key_words, soup);
-            Console.WriteLine();
+            Console.WriteLine("\n\n\n");
             Console.WriteLine(conclusion);
             timer.Abort();
             Console.ReadLine();
