@@ -385,7 +385,7 @@ namespace ConsoleApp5
             {
                 try
                 {
-                    long? id = 0;//2436112//106333983
+                    long? id = 0;//2436112
                     Console.Write("ID пользователя для анализа. Например, 2436112:");
                     id = Convert.ToInt32(Console.ReadLine());
 
