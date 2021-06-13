@@ -19,24 +19,35 @@ namespace ConsoleApp5
 {
     enum PostRepostComment
     {
-        Post =0 ,
+        Post = 0 ,
         Repost = 1,
         Comment = 2
     }
-    public class WallPost
-    {
-        public WallPost(long? PostId, string Text, List<string> Comments)
-        {
-            this.PostId = PostId;
-            this.Text = Text;
-            this.Comments = Comments;
-        }
 
-        public long? PostId { get; set; }
-        public string Text { get; set; }
-        public List<string> Comments { get; set; }
-        public List<string> PhotoNames { get; set; }
+    public class ConclusionComparer : IComparer<ConcusionPair>
+    {
+        public int Compare(ConcusionPair val1, ConcusionPair val2)
+        {
+            if (val1.value < val2.value)
+                return 1;
+            else if (val1.value > val2.value)
+                return -1;
+            else
+                return 0;
+        }
     }
+
+    public class ConcusionPair
+    {
+        public ConcusionPair(string key, int value)
+        {
+            this.key = key;
+            this.value = value;
+        }
+        public string key { get; set; }
+        public int value { get; set; }
+    }
+
     class Program
     {
         //Поисх всех вхождений подстроки
@@ -254,7 +265,7 @@ namespace ConsoleApp5
 
             commentsBuilder.Clear();
         }
-        static void Main(string[] args)
+        static void Analyze(VkApi api, long? id, ulong postsToAnalyze, bool loger)
         {
             System.IO.DirectoryInfo di = new DirectoryInfo("userphotos/");
 
@@ -263,49 +274,33 @@ namespace ConsoleApp5
                 file.Delete();
             }
 
-            long? id = 2436112;
-            string access_token = "4fc507a59d36dce191e6ebe4892ae198506ac28e4d2b191981d711a28390bca51d30e9de0f0d296a59030";
             string[] key_words;
-            ulong postsToAnalyze = 20;
-            //Console.WriteLine("ID пользователя для анализа:");
-            //access_token = Console.ToInt32(Console.ReadLine());
-            //Console.WriteLine("access_token вашего аккаунта:");
-            //id = Convert.ToInt32(Console.ReadLine());
-            //Console.WriteLine("Ключевые слова через пробел:");
-            using (FileStream fstream = File.OpenRead("dictionary.txt"))
+            using (FileStream fstream = File.OpenRead("SLOva.txt"))
             {
                 byte[] array = new byte[fstream.Length];
                 fstream.Read(array, 0, array.Length);
-                key_words = System.Text.Encoding.UTF8.GetString(array).Split(',').Select(x=>x.ToLower()).ToArray();
+                key_words = System.Text.Encoding.UTF8.GetString(array).Split(',').Select(x => x.ToLower()).ToArray();
             }
 
-            log = false;
+            log = loger;
 
             quantity = new int[key_words.Length];
             quantity.Initialize();
 
-            var api = new VkApi();
-
-            api.Authorize(new ApiAuthParams
-            {
-                AccessToken = access_token
-            });
-
             var timer = new System.Timers.Timer(1000);
+            int i = 0;
             int n = 0;
             if (log == false)
             {
                 timer.Elapsed += delegate {
-                    Console.Write("\r Processing: {0} seconds.", n++);
+                    int remained_posts = postsToAnalyze > 100 ? 100 - i : (int)postsToAnalyze - i;
+                    Console.Write("\r Processing: {0} seconds. There are {1} to analyze...", n++, remained_posts);
                 };
                 timer.AutoReset = true;
                 timer.Enabled = true;
                 timer.Start();
             }
-                
 
-            Stopwatch stopWatch = new Stopwatch();
-            stopWatch.Start();
 
             var records = api.Wall.Get(new WallGetParams
             {
@@ -313,7 +308,7 @@ namespace ConsoleApp5
                 Count = postsToAnalyze
             });
 
-            int i = 0;
+            
             foreach (var post in records.WallPosts)
             {
                 if (log)
@@ -326,7 +321,7 @@ namespace ConsoleApp5
                 AnalyzeKeyWords(key_words, post.Text, "Анализ текста поста:");
 
                 List<string> photos = new List<string>();
-                foreach(var attachment in post.Attachments)
+                foreach (var attachment in post.Attachments)
                 {
                     if (attachment.Type.Name == "Photo")
                     {
@@ -352,18 +347,67 @@ namespace ConsoleApp5
                 GetAndAnalyzeComments(api, id, key_words, post);
                 if (log)
                     Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
+                Thread.Sleep(1000);
             }
 
-            stopWatch.Stop();
-            TimeSpan ts = stopWatch.Elapsed;
             timer.Stop();
 
-            Console.WriteLine($"\n\n\n\n\n\t\t\t\t\t ЗАКЛЮЧЕНИЕ. Выполнено за {ts.Seconds} секунд");
-            for (int j = 0; j < key_words.Length; j++){
-                Console.WriteLine("\t\t\t\t\t\tКлюч {0}. Найдено {1}", key_words[j], quantity[j]);
+            List<ConcusionPair> conclusion = new List<ConcusionPair>();
+            for (int j = 0; j < key_words.Length; j++)
+            {
+                conclusion.Add(new ConcusionPair(key_words[j], quantity[j]));
             }
 
+            ConcusionPair[] conclusion_as_array = conclusion.ToArray();
+            Array.Sort(conclusion_as_array, new ConclusionComparer());
+
+            Console.WriteLine($"\n\n\n\n\n\t\t\t\t\t ЗАКЛЮЧЕНИЕ. Выполнено за {n} секунд");
+
+            foreach (var pair in conclusion_as_array)
+            {
+                Console.WriteLine("\t\t\t\t\t\tКлюч {0}. Найдено {1}", pair.key, pair.value);
+            }
+        }
+        static void Main(string[] args)
+        {
             
+            string access_token = string.Empty;
+            Console.Write("\naccess_token вашего аккаунта:");
+            access_token = Console.ReadLine();
+
+            var api = new VkApi();
+            api.Authorize(new ApiAuthParams
+            {
+                AccessToken = access_token
+            });
+
+            while (true)
+            {
+                try
+                {
+                    long? id = 0;//2436112//106333983
+                    Console.Write("ID пользователя для анализа. Например, 2436112:");
+                    id = Convert.ToInt32(Console.ReadLine());
+
+                    ulong postsToAnalyze = 0;
+                    Console.Write("\nКоличество анализируемых постов (не более 100):");
+                    postsToAnalyze = (ulong)Convert.ToInt32(Console.ReadLine());
+
+                    bool log = false;
+                    Console.Write("\nЛогировать? (0/1):");
+                    log = Convert.ToBoolean(Convert.ToInt32(Console.ReadLine()));
+
+                    Analyze(api, id, postsToAnalyze, log);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine(exception.Message);
+                }
+                
+            }
+            
+
+
             Console.ReadLine();
         }
     }
