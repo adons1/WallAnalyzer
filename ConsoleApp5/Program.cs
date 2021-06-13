@@ -122,10 +122,10 @@ namespace ConsoleApp5
                     {
                         string result = reader.ReadToEnd();
 
-                        FileStream file = new FileStream("alalisys_photos.txt", FileMode.Open);
+                        FileStream file = new FileStream("analisys_photos.txt", FileMode.Open);
                         byte[] array = new byte[file.Length];
                         file.Read(array, 0, array.Length);
-                        textFromFile = System.Text.Encoding.Default.GetString(array);
+                        textFromFile = System.Text.Encoding.UTF8.GetString(array);
                         file.Close();
                     }
                 }
@@ -165,7 +165,14 @@ namespace ConsoleApp5
 
                 if (repostPhotos.Count > 0)
                 {
-                    GetAndAnalyzePhotos(api, repost.OwnerId, PostRepostComment.Repost, key_words, repostPhotos);
+                    try
+                    {
+                        GetAndAnalyzePhotos(api, repost.OwnerId, PostRepostComment.Repost, key_words, repostPhotos);
+                    }
+                    catch(Exception exception)
+                    {
+                        Console.WriteLine("\t" + exception.Message);
+                    }
                 }
             }
         }
@@ -289,11 +296,12 @@ namespace ConsoleApp5
 
             var timer = new System.Timers.Timer(1000);
             int i = 0;
+            ulong offset = 0;
             int n = 0;
             if (log == false)
             {
                 timer.Elapsed += delegate {
-                    int remained_posts = postsToAnalyze > 100 ? 100 - i : (int)postsToAnalyze - i;
+                    int remained_posts = (int)postsToAnalyze - i - (int)offset;
                     Console.Write("\r Processing: {0} seconds. There are {1} to analyze...", n++, remained_posts);
                 };
                 timer.AutoReset = true;
@@ -301,54 +309,75 @@ namespace ConsoleApp5
                 timer.Start();
             }
 
-
-            var records = api.Wall.Get(new WallGetParams
+            while (offset < postsToAnalyze)
             {
-                OwnerId = id,
-                Count = postsToAnalyze
-            });
+                if (offset + (ulong)i >= postsToAnalyze)
+                    break;
 
-            
-            foreach (var post in records.WallPosts)
-            {
-                if (log)
+                var records = api.Wall.Get(new WallGetParams
                 {
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    Console.WriteLine("Пост" + i);
-                    Console.ForegroundColor = ConsoleColor.White;
-                    Console.WriteLine(post.Text);
+                    OwnerId = id,
+                    Count = postsToAnalyze - offset,
+                    Offset = offset
+                });
+
+                if (offset == 0)
+                {
+                    Console.WriteLine("У пользователя {0} постов", records.TotalCount);
                 }
-                AnalyzeKeyWords(key_words, post.Text, "Анализ текста поста:");
 
-                List<string> photos = new List<string>();
-                foreach (var attachment in post.Attachments)
+                i = 0;
+                foreach (var post in records.WallPosts)
                 {
-                    if (attachment.Type.Name == "Photo")
+                    if (log)
                     {
-                        photos.Add(attachment.Instance.Id.ToString());
+                        Console.ForegroundColor = ConsoleColor.Black;
+                        Console.BackgroundColor = ConsoleColor.White;
+                        int nmb_of_post = (int)offset + i;
+                        Console.WriteLine("Пост " + nmb_of_post + " от " + post.Date);
+                        Console.ForegroundColor = ConsoleColor.White;
+                        Console.BackgroundColor = ConsoleColor.Black;
+                        Console.WriteLine("\n"+post.Text);
                     }
-                }
-                Thread.Sleep(500);
+                    AnalyzeKeyWords(key_words, post.Text, "Анализ текста поста:");
 
-                if (photos.Count > 0)
+                    List<string> photos = new List<string>();
+                    foreach (var attachment in post.Attachments)
+                    {
+                        if (attachment.Type.Name == "Photo")
+                        {
+                            photos.Add(attachment.Instance.Id.ToString());
+                        }
+                    }
+                    Thread.Sleep(500);
+
+                    if (photos.Count > 0)
+                    {
+                        GetAndAnalyzePhotos(api, id, PostRepostComment.Post, key_words, photos);
+                        Thread.Sleep(1000);
+                    }
+                    i++;
+                    photos.Clear();
+                    if (log)
+                        Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
+
+                    AnalyzeReposts(api, post, key_words);
+                    if (log)
+                        Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
+
+
+                    GetAndAnalyzeComments(api, id, key_words, post);
+                    if (log)
+                        Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
+
+                }
+                offset += 100;
+                if(offset+(ulong)i == postsToAnalyze)
                 {
-                    GetAndAnalyzePhotos(api, id, PostRepostComment.Post, key_words, photos);
+                    break;
                 }
-                i++;
-                photos.Clear();
-                if (log)
-                    Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
-
-                AnalyzeReposts(api, post, key_words);
-                if (log)
-                    Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
-
-
-                GetAndAnalyzeComments(api, id, key_words, post);
-                if (log)
-                    Console.WriteLine("\t" + "_____________________________________________________________________________________________________");
-                Thread.Sleep(1000);
             }
+            
 
             timer.Stop();
 
@@ -386,15 +415,15 @@ namespace ConsoleApp5
                 try
                 {
                     long? id = 0;//2436112
-                    Console.Write("ID пользователя для анализа. Например, 2436112:");
+                    Console.Write("ID пользователя для анализа. Например, 2436112:  ");
                     id = Convert.ToInt32(Console.ReadLine());
 
                     ulong postsToAnalyze = 0;
-                    Console.Write("\nКоличество анализируемых постов (не более 100):");
+                    Console.Write("\nКоличество анализируемых постов:  ");
                     postsToAnalyze = (ulong)Convert.ToInt32(Console.ReadLine());
 
                     bool log = false;
-                    Console.Write("\nЛогировать? (0/1):");
+                    Console.Write("\nЛогировать? (0/1):  ");
                     log = Convert.ToBoolean(Convert.ToInt32(Console.ReadLine()));
 
                     Analyze(api, id, postsToAnalyze, log);
