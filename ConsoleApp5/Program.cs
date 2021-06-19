@@ -272,7 +272,7 @@ namespace ConsoleApp5
 
             commentsBuilder.Clear();
         }
-        static void Analyze(VkApi api, long? id, ulong postsToAnalyze, bool loger)
+        static void Analyze(VkApi api, long? id, ulong postsToAnalyze, bool loger, string dictionary)
         {
             System.IO.DirectoryInfo di = new DirectoryInfo("userphotos/");
 
@@ -282,7 +282,7 @@ namespace ConsoleApp5
             }
 
             string[] key_words;
-            using (FileStream fstream = File.OpenRead("SLOva.txt"))
+            using (FileStream fstream = File.OpenRead(dictionary))
             {
                 byte[] array = new byte[fstream.Length];
                 fstream.Read(array, 0, array.Length);
@@ -426,7 +426,11 @@ namespace ConsoleApp5
                     Console.Write("\nЛогировать? (0/1):  ");
                     log = Convert.ToBoolean(Convert.ToInt32(Console.ReadLine()));
 
-                    Analyze(api, id, postsToAnalyze, log);
+                    string dictionary = string.Empty;
+                    Console.Write("\nВведите файл словаря (должен быть в дирекотории с программой):  ");
+                    dictionary = Console.ReadLine();
+
+                    Analyze(api, id, postsToAnalyze, log, dictionary);
                 }
                 catch (Exception exception)
                 {
@@ -434,9 +438,6 @@ namespace ConsoleApp5
                 }
                 
             }
-            
-
-
             Console.ReadLine();
         }
     }
